@@ -54,7 +54,7 @@ class Test(unittest.TestCase):
     def test_evaluate_gf_data(self):
         print("test_evaluate_gf_data")
         f_from = os.path.join(curdir, "resources", "info500.json")
-        f_to = os.path.join(curdir, os.path.pardir, "tmp", "evaluate.json")
+        f_to = os.path.join(curdir, os.path.pardir, "tmp", "text_rank_evaluate.json")
         f_trace = os.path.join(curdir, os.path.pardir, "tmp", "evaluate.trace")
         if os.path.exists(f_to): os.remove(f_to)
         if os.path.exists(f_trace): os.remove(f_trace)
@@ -74,7 +74,8 @@ class Test(unittest.TestCase):
                                   "predict": "%s %s" %(abstract[0] if len(abstract) > 0 else "",  abstract[1] if len(abstract) > 1 else ""),
                                   "_id": o["_id"],
                                   "uuid": o["uuid"],
-                                  "rank": "<br><br>".join(["score: %s| %s" % (b ,a) for (a, b) in zip(abstract, scores)])
+                                  "rank": zip(abstract, scores)
+                                  # "rank": "<br><br>".join(["score: %s| %s" % (b ,a) for (a, b) in zip(abstract, scores)])
                                   })
                     tokens = sumz.tokenlize(content)
                     # print("scores[0]:", scores[0])
