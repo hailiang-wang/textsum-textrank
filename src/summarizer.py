@@ -1,0 +1,360 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+#===============================================================================
+#
+# Copyright (c) 2017 <> All Rights Reserved
+#
+#
+# File: /Users/hain/ai/textsum-textrank/src/summarizer.py
+# Author: Hai Liang Wang
+# Date: 2017-11-04:14:00:56
+#
+#===============================================================================
+
+"""
+   
+"""
+from __future__ import print_function
+from __future__ import division
+
+__copyright__ = "Copyright (c) 2017 . All Rights Reserved"
+__author__    = "Hai Liang Wang"
+__date__      = "2017-11-04:14:00:56"
+
+
+import os
+import sys
+curdir = os.path.dirname(os.path.abspath(__file__))
+sys.path.append(curdir)
+
+if sys.version_info[0] < 3:
+    reload(sys)
+    sys.setdefaultencoding("utf-8")
+    # raise "Must be using Python 3"
+else:
+    raise "Must be using Python 2.x"
+    sys.exit()
+
+import numpy
+import networkx
+import itertools
+import data_processor
+from common import utils as common_utils
+from common import log
+from common import similarity
+logger = log.getLogger(__name__)
+
+PUNCT_SENTENCE_ENDS = ["。", "!", "?", "？", "！"]
+PUNCT_SENTENCE_EMBED_START = "“" # 断句在嵌套的段落中，比如：他说：“蛇么。”
+PUNCT_SENTENCE_EMBED_END = "”"
+
+
+def normalize(v):
+    '''
+    normalize to 1
+    '''
+    norm=numpy.linalg.norm(v, ord=1)
+    if norm==0:
+        norm=numpy.finfo(v.dtype).eps
+
+    r = v/norm
+    return [float("%.5f" % x) for x in r]
+
+class Summarizer():
+    '''
+    summarize articles
+    '''
+
+    def __init__(self):
+        pass
+
+    def build_graph(self, nodes):
+        """Return a networkx graph instance.
+        :param nodes: List of hashables that represent the nodes of a graph.
+        """
+        gr = networkx.Graph()  # initialize an undirected graph
+        gr.add_nodes_from(nodes)
+        nodePairs = list(itertools.combinations(nodes, 2))
+
+        # add edges to the graph (weighted by Levenshtein distance)
+        for pair in nodePairs:
+            firstString = pair[0]
+            secondString = pair[1]
+            distance = similarity.compare(firstString, secondString, seg=False)
+            gr.add_edge(firstString, secondString, weight=distance)
+
+        return gr
+
+    def paragraph_to_sentence(self, paragraph):
+        '''
+        段落转换为句子
+        返回(生成器): 句子
+        '''
+        status_embed = False
+        size = len(paragraph)
+        # print("paragraph: %s \n" % paragraph)
+        w, t = data_processor.word_segment(paragraph, vendor = "jieba", punct = True)
+        sb = [] # temp sentence buffer
+        for x,y in zip(w, t):
+            if x == PUNCT_SENTENCE_EMBED_START:
+                status_embed = True
+                sb.append(x)
+                continue
+
+            if x == PUNCT_SENTENCE_EMBED_END:
+                status_embed = False
+
+            if x in PUNCT_SENTENCE_ENDS and not status_embed:
+                yield "".join(sb), x
+                sb = []
+            else:
+                sb.append(x)
+        # 当一个段落的结尾没有标点的时候。
+        if len(sb) > 3: yield "".join(sb), None
+
+    def doc_to_paragraphs(self, content):
+        '''
+        文档转换为段落
+        '''
+        result = []
+        paragraphs = content.split("\n")
+        for x in paragraphs:
+            x = x.strip()
+            is_sentence = False
+            # 判断是不是句子，如果不是句子
+            # 也许是段落的标题，那么这个句子虽然不能输出，但是包含的词汇权重应该比较大
+            # TODO 利用段落标题和headline，这些属于 textteaser 的部分。 
+            for o in PUNCT_SENTENCE_ENDS:
+                if x.endswith(o):
+                    is_sentence = True
+                    break
+            if is_sentence and len(x) > 0: result.append(x)
+        return result
+
+    def doc_to_sentences(self, content):
+        '''
+        将文档转化为独立的句子
+        '''
+        result = []
+        paragraphs = self.doc_to_paragraphs(content)
+        for x in paragraphs:
+            for s,p in self.paragraph_to_sentence(x):
+                result.append((s+p) if p else s)
+        return result
+
+
+    def get_sentence_tokens(self, sentences):
+        '''
+        生成文章句子list的token list
+        '''
+        for x in sentences:
+            # 去掉标点和停用词
+            w, t = data_processor.word_segment(x, vendor = "jieba", punct = False, stopword = False)
+            yield " ".join(w)
+
+
+    def key_phrases(self, content, title = None):
+        '''
+        抽取方式取文章的关键字
+        content: 正文
+        title: 标题
+        '''
+        # 全角转半角
+        content = data_processor.filter_full_to_half(content)
+        title = data_processor.filter_full_to_half(title) if title else ""
+        sentences = self.doc_to_sentences(content)
+        vocab = dict()
+
+        for x in sentences:
+            w, _ = data_processor.word_segment(x, vendor = "jieba", punct = False, stopword = False)
+            if len(w) > 3:
+                for o in w:
+                    if not o in vocab:
+                        vocab[o] = 1
+                    else: 
+                        vocab[o] += 1
+
+        tokens = vocab.keys()
+        graph = self.build_graph(tokens)
+        # pageRank - initial value of 1.0, error tolerance of 0,0001,
+        tr = networkx.pagerank(graph, weight='weight')
+        # most important words in ascending order of importance
+        keyphrases = sorted(tr, key=tr.get,
+                        reverse=True)
+
+        # TODO use idf value for scoring words
+        # TODO use tag result for scoring words
+        return keyphrases, [tr[x] for x in tr]
+
+    def tokenlize(self, content, title = None):
+        '''
+        Get all tokens as a list for content
+        '''
+        # 全角转半角
+        content = data_processor.filter_full_to_half(content)
+        title = data_processor.filter_full_to_half(title) if title else ""
+        sentences = self.doc_to_sentences(content)
+        # for x in sentences:
+        #     print(x)
+        #     print("*"*20 + "\n")
+        tokens = []
+
+        for x in sentences:
+            w, _ = data_processor.word_segment(x, vendor = "jieba", punct = False, stopword = False)
+            if len(w) > 3:
+                for o in w: tokens.append(o)
+        return tokens
+
+    def extract(self, content, title = None):
+        '''
+        采用抽取方式提取摘要
+        content: 正文
+        title: 标题
+        '''
+        # 全角转半角
+        content = data_processor.filter_full_to_half(content)
+        title = data_processor.filter_full_to_half(title) if title else ""
+        # TODO return sub-title
+        sentences = self.doc_to_sentences(content)
+        # for x in sentences:
+        #     print(x)
+        #     print("*"*20 + "\n")
+        s2t = dict() # sentence to tokens
+        t2s = dict() # tokens to sentence
+        tokens = []
+
+        for x in sentences:
+            w, _ = data_processor.word_segment(x, vendor = "jieba", punct = False, stopword = False)
+            if len(w) > 3:
+                o = " ".join(w)
+                s2t[x] = o
+                t2s[o] = x
+                tokens.append(o)
+
+        '''
+        Recall: sort and ranking with textrank
+        '''
+        graph = self.build_graph(tokens)
+        # textrank results
+        tr = networkx.pagerank(graph, weight='weight')
+
+        # most important sentences in ascending order of importance
+        sort = sorted(tr, key=tr.get,
+                       reverse=True)
+
+        '''
+        Evaluate: re-ranking model with title
+        '''
+
+
+        # for x in sort: print("sen: %s, score: %f" % (x, tr[x]))
+        # normalize([tr[x] for x in sort])
+        return [ t2s[x] for x in sort], [tr[x] for x in sort]
+
+import unittest
+
+# run testcase: python /Users/hain/ai/textsum-textrank/src/summarizer.py Test.testExample
+class Test(unittest.TestCase):
+    '''
+    
+    '''
+    def setUp(self):
+        self.title = "360回归:交易结构暗藏巧思 投资人有望获丰厚回报"
+        self.content = """360借壳方案出炉，为中概股回归之路点亮了一盏灯。如果交易顺利，三六零科技股份有限公司（简称“三六零”）将是中国前几大互联网巨头中唯一一家登陆A股的公司。与近些年的重磅借壳方案相比，三六零504亿元资产规模，远超分众传媒（457亿借壳）、顺丰控股（433亿借壳）、巨人网络（130亿借壳）等的交易规模。
+800多页的重组方案，更多精彩藏于细节：低位停牌的江南嘉捷，目前总市值仅有35亿元，悬殊的差距令壳公司原股东权益被大量稀释，虽然在三六零面前壳公司的议价能力微弱，但是交易仍对原实际控制人作了一定的利益补偿安排。同时，三六零的“生意经”首次在A股详细披露，A股投资人的回报空间或将十分丰厚。
+交易结构暗藏巧思
+504亿元的交易规模，不设配套融资，结构不算复杂，但在该交易中，一笔“9.71%嘉捷机电”的小股权令人关注。
+根据证监会2017年1月修改的《上市公司重大资产重组管理办法》，为进一步遏制重组上市（即借壳）的套利空间，取消了重组上市的配套融资，这被视为众多修改的限制条件中最有杀伤力一条。本次三六零的借壳方案中未见配套融资的安排，可谓顺理成章。
+交易结构虽然不算复杂，但仍有巧思蕴含其中。方案在出售资产部分中有这样的设计：江南嘉捷拟将除全资子公司嘉捷机电100%股权之外的全部资产、负债、业务、人员、合同、资质及其他一切权利与义务划转至嘉捷机电。在此基础上，江南嘉捷将嘉捷机电90.29%股权以现金方式转让给原控股股东金志峰、金祖铭或其指定的第三方，交易作价16.9亿元；将嘉捷机电另9.71%股权与三六零全体股东拥有的三六零100%股权的等值部分进行置换，此后再由三六零全体股东将这9.71%股权转让给金志峰、金祖铭或其指定的第三方。
+仅9.71%的嘉捷机电小股权，为何成为交易中被反复买卖的资产？有投行人士对记者表示，目前借壳经典的操作方式是：资产置换+定向增发+回购资产，即壳公司先将全部原资产与借壳方拟置入资产中等额部分做资产置换，差额部分以新发行的壳公司股份支付；之后壳公司原股东以置出资产账面净值为基础，以现金或股权形式，向新股东回购原置出资产，使公司成为净壳，该部分资产一买一卖间的差价，基本就是对壳公司原股东的补偿。从本方案来看，“嘉捷机电9.71%股权”就是这一重要的调节器。
+会计处理堪称“清流”
+若交易顺利完成，对投资者来说更为重要的，应是三六零的“生意经”。这家网络安全巨头的业绩和持续盈利能力究竟如何？未来三年高达89亿元的合计业绩承诺能否兑现？作为互联网公司，它的会计处理是否稳健？
+交易方案首次对三六零的业务情况进行了详细披露。
+2012年，三六零以免费策略，颠覆、逆袭了当年的杀毒软件龙头金山毒霸，一举成为国内安全工具市场主导者。统计显示，2016年，360安全卫士的市场份额高达91.76%，在这个领域处于绝对垄断地位。
+从产品端上看，三六零的产品主要包括五大类：互联网安全产品及服务（如360安全卫士、360杀毒）、信息获取类产品（360搜索、360导航）、内容类产品（360影视大全、360娱乐）、智能硬件（智能摄像机、智能手表）、国家安全及社会安全服务（猎网平台、360 Cert、威胁情报中心、DDoS Mon）。
+从商业变现的角度考量，三六零主要依靠的是广告和游戏业务，此外智能硬件也贡献了小部分收入。方案披露，2016年，三六零的互联网广告及服务收入占公司主营业务收入的59.8%，游戏占26.38%，智能硬件占8.12%；2017年上半年，上述三种业务的收入占比分别为72.44%、16.58%和8.77%。
+财报显示，三六零业绩一直保持稳健增长。2015年至2017年上半年，三六零分别实现营收93.57亿元、99.04亿元、52.88亿元；净利润分别为13.40亿元、18.72亿元、14.11亿元；扣非净利润分别为10.65亿元、7.44亿元、9.95亿元；经营性现金流量净额分别为24.08亿元、51.57亿元、14.48亿元。值得注意的是，虽然公司2016年扣非净利润有所下降，但是经营性现金流增长显著，显示公司经营状况稳健向好。
+值得一提的是，研发费用资本化通常是科技企业进行利润调节的合法工具，但三六零却将技术研发费用全部计入了当期费用，未进行资本化，这样的做法在重研发支出的互联网公司中，堪称一股“清流”。据披露，2014年至2016年，三六零的研发支出分别为28.81亿、31.85亿、22.72亿元，分别占当期营收的37%、34%、23%。相比之下，目前A股不少热门的科技公司，其研发费用资本化率都在50%以上。
+投资人有望获丰厚回报
+由于奇虎360私有化时高达百亿美元的估值，买方团队多层分销引入了大量投资人。根据此前相关公告，间接参股三六零的A股公司中，中信国安持股量较大，出资额逾20亿元，预计合计持股占比4.46%。其次是天业股份，出资逾6亿元。其余出资2亿元以上的参股上市公司还有中南文化、电广传媒、雅克科技、浙江永强、三七互娱等。
+那么，三六零借壳后，A股投资人的回报空间如何？
+
+以中信国安为例。中信国安此前披露，预计对360私有化的投资金额约为4亿美元等值人民币。若按照对应26亿元人民币估算，中信国安持有重组后江南嘉捷的成本仅为9.15元/股，与江南嘉捷停牌前的股价8.79元相当接近。这意味着，江南嘉捷复牌后，中信国安有望获得丰厚的回报。
+更值得关注的是，证监会新闻发言人在3日例行发布会上回应360借壳时表示：“证监会支持境外优秀中资企业参与境内上市公司的并购重组，支持符合国家重点行业产业发展方向、掌握核心技术、具有一定规模的境外上市中资企业参与A股公司并购重组，并将对其中涉及的重组交易进行严格要求，严厉打击并购重组中可能涉嫌内幕交易的违法违规行为。”"""
+
+        self.content = '''
+        随着新城控股的一纸任命，又一位万达高管选择出走。
+11月1日，新城控股发布公告披露，同意聘黄春雷先生任公司副总裁，任期与本届董事会任期相同。
+据观点地产新媒体查阅，黄春雷1975年出生，1997年毕业于上海财经大学，获工学学士学位。于新城控股任职前，他先后任职于浪潮软件股份有限公司、上海万申信息产业股份有限公司，美通无线通信（上海）有限公司、微软（中国）有限公司企业咨询部及万达集团股份有限公司等公司，是典型的技术型高管。
+同时，这也是继去年陈德力加入新城担任副总裁后，又一位从万达转入新城的高管。2016年8月，新城控股发布公告称，经董事会审议通过，同意聘请陈德力任公司副总裁，分管新城商业管理事业部与资产管理中心。
+相比于彼时市场关于陈德力离职时的各种传闻，如今黄春雷的出走显得低调许多。
+黄春雷的新城
+公开资料显示，在万达时，黄春雷先后担任了集团总裁助理兼信息管理中心常务副总经理、集团总裁助理兼金融集团网络数据中心总经理。
+加入新城后，他也将分管集团信息管理中心及创新业务，负责集团信息化建设，包括住宅和商业的信息化将会进行一体化建设。
+随着房地产行业从黄金时代进入白银时代，信息化建设被越来越多纳入房企的管理中，王石甚至曾经说过，“搞不懂IT，我就连董事长都辞掉”。
+据观点地产新媒体了解，早在2012年，万达内部就开始推行信息化管理，将所有的商业运营通过信息化平台集合完成，以降低人力成本，同时使快速的商业扩展得到保证。
+为此，万达集团专门成立了慧云专项工作小组，由商业规划院、信息中心、商管公司等多部门合作，经过五年时间，研发出“慧云”信息管理系统，这也是全球规模最大的商业建筑智能化管理系统，并运用于旗下所有的万达广场中，包括轻资产模式中。
+显然，作为万达商业模式中重要的一环，黄春雷此前所在的信息管理中心对万达商业快速扩张起到了重要作用。
+无独有偶，在不久前举行的新城商业年会上，陈德力曾表示，目前重要的一个工作是打通新城商业的全产业链，即形成一个贯穿土地获取、规划设计、开发建设、招商运营、资产管理、资产证券化的闭环。其中，系统和人才是最大挑战的一部分。
+有市场人士对观点地产新媒体指，此次新城再度挖来万达前高管，昭显了其进一步加快跻身商业地产第一梯队的步伐。
+随着黄春雷的加入，这是近年来新城引入的第四位万达高管。除了陈德力，万达商管公司南区营运中心副总经钱文虹也于去年离职，现任新城招商中心总经理一职；此外，新城还挖来了原万达商管综合管理中心副总经理唐剑锋，担任新城商管运营中心总经理。
+在新城的规划中，到2020年，公司要实现100座吾悦广场的开业，同时取得百亿租金，进入商业地产第一梯队。
+万达商业前高管们
+众所周知，万达的人事变动频率向来不低。曾有这样一句话这样形容万达，铁打的营盘，流水的高管。
+从内部来看，模块化管理和刚性的制度确保了每年20个万达广场的高速化发展，同时也造成了高管的频繁离职。
+在外部环境上，不少商业地产商极力模仿万达时，也在不断挖万达的墙脚，其中不乏带领万达一路扩张的高管们，包括张华容、王寿庆、陈德力、张立洲等，均已悉数离职。
+时间回到2011年，张华容从万达离职，加盟红星商业，成为红星美凯龙商业地产新团队中的核心，此前她已在万达供职五年。
+观点地产新媒体了解，在张华容加入之初，万达商业正处于摸索阶段，此后万达一路扩张。直到2011年离职时，她共参与了43个万达广场的项目设计和招商工作，职位为万达商业管理副总经理兼招商中心总经理。
+张华容之后，曾有“上海王”之称的王寿庆也于翌年选择离开，加入广东创鸿集团担任执行总裁。
+2002年正式进入万达集团，主要参与上海项目公司的工作，且在万达内部有着很大的影响力。尤其是在运营上海万达广场上，从奠基到开业仅耗22个月零18天，并引进了沃尔玛等八大主力店，商场开业一年便实现盈利。他由此被业内称为“上海王”。
+不过，令人意外的是，在外兜兜转转三年后，王寿庆于2015年11月重回“老东家”，彼时被任命为万达文化产业集团副总裁兼万达主题娱乐有限公司总经理。只是不足一年后，他再次离职，上演了“二进二出万达”的戏码。'''
+        self.paragraph = """若交易顺利完成，对投资者来说更为重要的，应是三六零的“生意经”。这家网络安全巨头的业绩和持续盈利能力究竟如何？未来三年高达89亿元的合计业绩承诺能否兑现？作为互联网公司，它的会计处理是否稳健？交易方案首次对三六零的业务情况进行了详细披露。"""
+
+    def tearDown(self):
+        pass
+
+    def test_extract(self):
+        sumzer = Summarizer()
+        abstract, scores = sumzer.extract(self.content, self.title)
+        sum_up = 0.0
+        for (x,y) in enumerate(abstract):
+            print("index: %d >> %s | score: %f" % (x, y, scores[x]))
+            sum_up += scores[x]
+        print("total: %f" % sum_up)
+
+    def test_key_phases(self):
+        sumzer = Summarizer()
+        keywords, scores = sumzer.key_phrases(self.content, self.content)        
+        print(keywords)
+        for (k, v) in zip(keywords, scores):
+            print("word: %s, score: %f" % (k, v))
+
+    def test_paragraph_to_sentence(self):
+        sumzer = Summarizer()
+        for x,_ in sumzer.paragraph_to_sentence(self.paragraph):
+            print("pop: %s | 标点: %s" %(x, _))
+
+    def test_doc_to_sentences(self):
+        sumzer = Summarizer()
+        sentences = sumzer.doc_to_sentences(self.content)
+        for k,v in enumerate(sentences):
+            print("index: %d >> %s" % (k,v))
+
+    def test_doc_to_paragraphs(self):
+        sumzer = Summarizer()
+        paragraphs = sumzer.doc_to_paragraphs(self.content)
+        print("paragraphs len:", len(paragraphs))
+
+        for (k, v) in enumerate(paragraphs):
+            print("index :", k)
+            print(v + "\n")
+
+    def test_norm_1(self):
+        print("test_norm_1")
+        print(normalize([0.1, 0.2, 0.3]))
+
+def test():
+    unittest.main()
+
+if __name__ == '__main__':
+    test()

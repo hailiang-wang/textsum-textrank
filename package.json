@@ -1,0 +1,25 @@
+{
+  "name": "textsum-textrank",
+  "version": "1.0.0",
+  "description": "",
+  "main": "gulpfile.js",
+  "directories": {
+    "doc": "docs"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Samurais/textsum-textrank.git"
+  },
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/Samurais/textsum-textrank/issues"
+  },
+  "homepage": "https://github.com/Samurais/textsum-textrank#readme",
+  "devDependencies": {
+    "gulp-shell": "^0.6.3"
+  }
+}
