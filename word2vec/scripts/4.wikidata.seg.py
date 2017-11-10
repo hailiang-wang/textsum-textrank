@@ -57,8 +57,8 @@ class Test(unittest.TestCase):
         pass
 
     def test_process_wikidata(self):
-        f_from = os.path.join(curdir, os.path.pardir, os.path.pardir, "tmp", "zhwiki-latest-pages-articles.1020.chs.normalized")
-        f_to = os.path.join(curdir, os.path.pardir, os.path.pardir, "tmp", "zhwiki-latest-pages-articles.1020.seg")
+        f_from = os.path.join(curdir, os.path.pardir, os.path.pardir, "tmp", "zhwiki-latest-pages-articles.0620.chs.normalized")
+        f_to = os.path.join(curdir, os.path.pardir, os.path.pardir, "tmp", "zhwiki-latest-pages-articles.0620.seg")
         process_wikidata(f_from, f_to)
 
     def test_sen_seg(self):

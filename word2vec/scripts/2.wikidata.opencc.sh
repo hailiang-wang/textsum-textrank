@@ -7,7 +7,7 @@
 baseDir=$(cd `dirname "$0"`;pwd)
 TMP_DIR=$baseDir/../../tmp
 originFile=$TMP_DIR/zhwiki-latest-pages-articles.extracted/AA/wiki_00
-postFile=$TMP_DIR/zhwiki-latest-pages-articles.0620.chs
+postFile=$TMP_DIR/zhwiki-latest-pages-articles.1020.chs
 # functions
 
 # main 

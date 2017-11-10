@@ -6,8 +6,8 @@
 # constants
 baseDir=$(cd `dirname "$0"`;pwd)
 TMP_DIR=$baseDir/../../tmp
-originFile=$TMP_DIR/zhwiki-latest-pages-articles.1020.chs
-postFile=$TMP_DIR/zhwiki-latest-pages-articles.1020.chs.normalized
+originFile=$TMP_DIR/zhwiki-latest-pages-articles.0620.chs
+postFile=$TMP_DIR/zhwiki-latest-pages-articles.0620.chs.normalized
 
 # functions
 
