@@ -66,7 +66,7 @@ class Test(unittest.TestCase):
                 o = json.loads(x.strip())
                 content = o["content"]
                 title = o["title"]
-                abstract, scores = sumz.extract(content)
+                abstract, scores = sumz.extract(content, title)
                 if len(scores) > 0:
                     output.append({
                                   "content": content,

@@ -186,6 +186,7 @@ class Summarizer():
         # TODO use tag result for scoring words
         return keyphrases, [tr[x] for x in tr]
 
+
     def tokenlize(self, content, title = None):
         '''
         Get all tokens as a list for content
@@ -205,11 +206,12 @@ class Summarizer():
                 for o in w: tokens.append(o)
         return tokens
 
-    def extract(self, content, title = None):
+    def extract(self, content, title = None, title_weight = 0.3):
         '''
         采用抽取方式提取摘要
         content: 正文
         title: 标题
+        title_weight: 标题boost句子的系数
         '''
         # 全角转半角
         content = data_processor.filter_full_to_half(content)
@@ -241,11 +243,21 @@ class Summarizer():
         # most important sentences in ascending order of importance
         sort = sorted(tr, key=tr.get,
                        reverse=True)
-
         '''
         Evaluate: re-ranking model with title
         '''
-
+        if title:
+            # title tokens and tags
+            tw, tt = data_processor.word_segment(title, vendor = "jieba", punct = False, stopword = False)
+            ts = [similarity.compare(" ".join(tw), x, seg = False) for x in sort]
+            if len(ts) > 0:
+                ts = normalize(ts)
+                # title score weighted
+                tsw = [ a*title_weight*(1/len(sort))*100 + b for (a, b) in zip(ts, [tr[x] for x in sort])]
+                # print("title score: %s" % tsw)
+                evr = [ x for _,x in sorted(zip(tsw, sort), reverse=True)]
+                evs = sorted(tsw, reverse=True)
+                return [ t2s[x] for x in evr], normalize(evs)
 
         # for x in sort: print("sen: %s, score: %f" % (x, tr[x]))
         # normalize([tr[x] for x in sort])
@@ -339,6 +351,17 @@ class Test(unittest.TestCase):
         sentences = sumzer.doc_to_sentences(self.content)
         for k,v in enumerate(sentences):
             print("index: %d >> %s" % (k,v))
+
+    def test_evaluate_with_title_single(self):
+        content = '''2017第十六届中国国际社会公共安全博览会(以下简称“安博会”)于2017年10月29日至11月1号在深圳会展中心隆重举行,本次展会持续4天。作为具有全球影响力的安防盛会,本届安博会预计将吸引来自150多个国家和地区的13万左右的业界人士前来观展。 AI、物联网、大数据平台等新技术,成为安防新动向。随着人们对安全性要求的提高,以及各级政府大力推进“平安城市”建设的进程,安防监控领域的数据量也随之呈现爆炸式增长。因此,安防行业具备在人工智能方面最完善的基础和最强烈的诉求。在过去的几年,公安、政府、交通这些安防行业的重点目标都已开始积极利用新一代智能安防产品。\r\n　　智慧城市需求旺盛,相关企业持续受益。根据中国产业信息网的数据预测,2017年我国智慧城市市场规模将超过3700亿元,未来五年的复合增长率超过30%,到2021年将达到12000亿元。\r\n　　PPP成为安防发展新模式。根据财政部发布的数据,截至2017年6月末,PPP项目中市政工程、交通运输以及生态建设和环境保护位列项目比例前三名,分别为4732、1756和826个,共占所有入库项目的54%。\r\n　　本次安博会上,各家安防厂商将会展示最新的安防相关产品和技术,A股相关上市公司值得关注:\r\n　　海康威视:国内安防企业龙头,布局人工智能、安防大数据平台。\r\n　　大华股份:智能安防+PPP,紧跟海康威视处于安防领域第一梯队。\r\n　　立昂技术:新疆本地安防企业,受益于新疆基础建设与维稳的需求,公司业绩大幅增长。\r\n　　苏州科达:政府部门视频会议业内领先,长期受益于国产替代政策\r\n　　易华录:专注于智能交通行业,通过PPP拓展到智慧城市领域。 熙菱信息:新疆本地安防企业,受益于新疆基础建设与维稳的需求,打造公告安全领域实战产品。\r\n　　重点推荐组合\r\n　　海康威视、立昂技术、广联达、用友网络、大华股份、汉得信息。\r\n　　风险提示:安防相关技术和业务进展不及预期。\r\n\r    转载自：新时代证券股份有限公司 '''
+        title = "计算机:关注AI、物联网等安防技术新动向"
+        sumzer = Summarizer()
+        abstract, scores = sumzer.extract(content, title)
+        sum_up = 0.0
+        for (x,y) in enumerate(abstract):
+            print("index: %d >> %s | score: %f" % (x, y, scores[x]))
+            sum_up += scores[x]
+        print("total: %f" % sum_up)
 
     def test_doc_to_paragraphs(self):
         sumzer = Summarizer()

@@ -1,0 +1,10 @@
+<ion-view view-title="自动摘要demo">
+  <ion-content>
+    <ion-list>
+      <ion-item ng-repeat="playlist in playlists" href="#/app/playlists/{{playlist.uuid}}">
+       <div style="width:50%"> <font color="green"> 原始标题:</font> {{playlist.headline}}  | <font color="red"> 正文长度: {{playlist.content.strLen()}}</font></div> 
+       <div style="width:50%"> <font color="blue">  抽取摘要:</font> {{playlist.predict}} </div>
+      </ion-item>
+    </ion-list>
+  </ion-content>
+</ion-view>

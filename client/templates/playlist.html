@@ -1,0 +1,20 @@
+<ion-view view-title="正文内容">
+  <ion-content>
+    <ion-item class="item item-text-wrap">
+        <p>标题：</p>
+        {{data.title}}
+        <br>
+        <br>
+        <p>摘要：</p>
+        {{data.predict}}
+        <br>
+        <br>
+        <p>正文：</p>
+        {{data.content}}
+        <br>
+        <br>
+        <p>评分：</p>
+        <p ng-bind-html="data.rank"></p>
+      </ion-item>
+  </ion-content>
+</ion-view>
