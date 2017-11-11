@@ -8,8 +8,8 @@ angular.module('starter.controllers', [])
   // listen for the $ionicView.enter event:
   //$scope.$on('$ionicView.enter', function(e) {
   //});
-  $rootScope.newsData = []
-    $http.get('/data/evaluate.json').success(function(response) {
+  $rootScope.newsData = {docs: [], textsum: []};
+    $http.get('/data/sample.json').success(function(response) {
         return response.data;
     }).then(function(data){
         console.log("newsData:", data.data)
@@ -54,9 +54,15 @@ angular.module('starter.controllers', [])
 })
 
 .controller('PlaylistsCtrl', function($rootScope, $scope) {
-  $scope.playlists = $rootScope.newsData;
+  $scope.docs = {};
+  $scope.textsum = {};
+  $scope.uuids = []
+
   $rootScope.$on('data:update:news', function(event, data){
-    $scope.playlists = $rootScope.newsData;
+      $scope.docs = $rootScope.newsData.docs;
+      $scope.textsum = $rootScope.newsData.textsum;
+      $scope.uuids = Object.keys($scope.docs);
+      console.log("data:update:news.");
   })
   
 })
@@ -64,25 +70,28 @@ angular.module('starter.controllers', [])
 .controller('PlaylistCtrl', function($rootScope, $scope, $stateParams) {
 
   var uuid = $stateParams.uuid;
-  var predict = "";
-  var title = "";
-  var content = "";
-  var rank = "";
+  console.log("PlaylistCtrl id:", uuid)
+  $scope.data = {
+    content: "",
+    title: "",
+    predict: []
+  };
 
-  for(var i =0; i < $rootScope.newsData.length; i++){
-    if($rootScope.newsData[i]["uuid"] == uuid){
-      content = $rootScope.newsData[i]["content"];
-      predict = $rootScope.newsData[i]["predict"];
-      title = $rootScope.newsData[i]["headline"];
-      rank = $rootScope.newsData[i]["rank"];
-      break;
-    }
+  if($rootScope.newsData.docs[uuid]){
+      $scope.data = {
+        content: $rootScope.newsData.docs[uuid]["content"],
+        title: $rootScope.newsData.docs[uuid]["headline"],
+        predict: $rootScope.newsData.textsum[uuid]
+      };
   }
 
-  $scope.data = {
-    content: content,
-    predict: predict,
-    title: title,
-    rank: rank
-  };
+  $rootScope.$on('data:update:news', function(event, data){
+      $scope.data = {
+        content: $rootScope.newsData.docs[uuid]["content"],
+        title: $rootScope.newsData.docs[uuid]["headline"],
+        predict: $rootScope.newsData.textsum[uuid]
+      };
+      console.log("predict:", $scope.data.predict)
+  })
+
 });
