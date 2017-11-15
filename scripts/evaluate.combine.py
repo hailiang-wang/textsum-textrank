@@ -76,12 +76,14 @@ class Test(unittest.TestCase):
 
                 pairseq_json[y["uuid"]] = [dict({
                              "feature_id": "textrank",
-                             "rank": y["rank"]
+                             "rank": y["rank"],
+                             "keywords": y["keywords"] if "keywords" in y else None
                              })]
             else:
                 pairseq_json[y["uuid"]].append(dict({
                              "feature_id": "textrank",
-                             "rank": y["rank"]
+                             "rank": y["rank"],
+                             "keywords": y["keywords"] if "keywords" in y else None
                              }))
 
         if os.path.exists(output_): os.remove(output_)

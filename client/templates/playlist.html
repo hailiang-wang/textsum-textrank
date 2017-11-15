@@ -14,18 +14,21 @@
                     <div ng-if="item.feature_id == 'fairseq_0'">
                         方法1
                     </div>
-
                     <div ng-if="item.feature_id == 'fairseq_1'">
                         方法2
                     </div>
-
                     <div ng-if="item.feature_id == 'textrank'">
                         方法3
                     </div>
                 </button>
+                <div ng-if="item.keywords">
+                    <h3>关键词</h3>
+                    <p>{{item.keywords}}</p>
+                </div>
                 <ion-list>
                     <ion-item ng-repeat="item_l2 in item.rank| limitTo : 5">
-                         {{item_l2[0]}} | <font color="red">score: {{item_l2[1]}} </font>
+                        {{item_l2[0]}} |
+                        <font color="red">score: {{item_l2[1]}} </font>
                     </ion-item>
                     </ion-item-group>
                 </ion-list>

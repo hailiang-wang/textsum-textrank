@@ -67,6 +67,7 @@ class Test(unittest.TestCase):
                 content = o["content"]
                 title = o["title"]
                 abstract, scores = sumz.extract(content, title)
+                keywords, _ = sumz.keywords(content)
                 if len(scores) > 0:
                     output.append({
                                   "content": content,
@@ -74,7 +75,8 @@ class Test(unittest.TestCase):
                                   "predict": "%s %s" %(abstract[0] if len(abstract) > 0 else "",  abstract[1] if len(abstract) > 1 else ""),
                                   "_id": o["_id"],
                                   "uuid": o["uuid"],
-                                  "rank": zip(abstract, scores)
+                                  "rank": zip(abstract, scores),
+                                  "keywords": keywords
                                   # "rank": "<br><br>".join(["score: %s| %s" % (b ,a) for (a, b) in zip(abstract, scores)])
                                   })
                     tokens = sumz.tokenlize(content)
