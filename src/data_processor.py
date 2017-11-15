@@ -131,6 +131,32 @@ def word_segment(utterance, vendor = "jieba", punct = False, stopword = True):
     return words, tags
 
 '''
+jieba analyse
+'''
+import jieba.analyse as analyzer
+JIEBA_ANALYZER_IDF = os.path.join(curdir, "resources", "jieba_ext", "idf.txt.big")
+JIEBA_ANALYZER_STOPWORDS = os.path.join(curdir, "resources", "jieba_ext", "stop_words.txt")
+analyzer.set_idf_path(JIEBA_ANALYZER_IDF)
+analyzer.set_stop_words(JIEBA_ANALYZER_STOPWORDS)
+
+def extract_keywords(content, topK=10, vendor = "tfidf"):
+    '''
+    extract key words with TF-IDF or textrank
+    '''
+    words = []
+    scores = []
+    if vendor == 'tfidf':
+        for x,y in analyzer.extract_tags(content, topK=topK, withWeight=True):
+            words.append(x)
+            scores.append(y)
+    elif vendor == 'textrank':
+        for x,y in analyzer.textrank(content, topK=topK, withWeight=True, allowPOS=('ns', 'n', 'vn', 'v')):
+            words.append(x)
+            words.append(y)
+    else:
+        raise Exception("Invalid vendor")
+    return words, scores
+'''
 Sense less words for News data
 '''
 SENSE_LESS_WORD_PATH = os.path.join(curdir, "resources", "less350.txt")
