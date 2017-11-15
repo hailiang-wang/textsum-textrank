@@ -2,12 +2,12 @@
 timestamp=`date +%Y%m%d%H%M%S`
 # variables
 ## Use text data from <file> to train the model
-FILEIN=news.raw.20171104
+FILEIN=w2v_data_20171115.txt
 #FILEIN=zhwiki-latest-pages-articles.1020.seg
 ## Set size of word vectors; default is 100
 EMBEDDING_DIM=100
 ## Set max skip length between words; default is 5
-WINDOW=5
+WINDOW=10
 ## Set threshold for occurrence of words. Those that appear with higher frequency in the training data
 ## will be randomly down-sampled; default is 1e-3, useful range is (0, 1e-5)
 SAMPLE=1e-3

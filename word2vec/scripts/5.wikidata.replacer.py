@@ -68,8 +68,8 @@ class Test(unittest.TestCase):
 
     def test_replace_wikidata(self):
         print("test replace_wikidata")
-        f_from = os.path.join(curdir, os.path.pardir, os.path.pardir, "tmp", "zhwiki-latest-pages-articles.1020.seg")
-        f_to = os.path.join(curdir, os.path.pardir, os.path.pardir, "tmp", "zhwiki-latest-pages-articles.1020.rep")
+        f_from = os.path.join(curdir, os.path.pardir, os.path.pardir, "tmp", "zhwiki-latest-pages-articles.0620.seg")
+        f_to = os.path.join(curdir, os.path.pardir, os.path.pardir, "tmp", "zhwiki-latest-pages-articles.0620.rep")
         replace_wikidata(f_from, f_to)
 
 
