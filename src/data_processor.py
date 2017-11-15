@@ -40,6 +40,7 @@ import xml.etree.ElementTree as ET
 import re
 import requests
 import json
+import math
 from common import utils as common_utils
 
 def resolve_utf8(word):
@@ -134,7 +135,7 @@ def word_segment(utterance, vendor = "jieba", punct = False, stopword = True):
 jieba analyse
 '''
 import jieba.analyse as analyzer
-JIEBA_ANALYZER_IDF = os.path.join(curdir, "resources", "jieba_ext", "idf.txt.big")
+JIEBA_ANALYZER_IDF = os.path.join(curdir, "resources", "similarity.vocab.idf")
 JIEBA_ANALYZER_STOPWORDS = os.path.join(curdir, "resources", "jieba_ext", "stop_words.txt")
 analyzer.set_idf_path(JIEBA_ANALYZER_IDF)
 analyzer.set_stop_words(JIEBA_ANALYZER_STOPWORDS)
@@ -484,6 +485,21 @@ def preprocess_sohu_full_raw_txt():
                 append_line_to_file(c + "\n", os.path.join(curdir, os.path.pardir, "tmp", "full.sohu.com.content.txt"))
                 append_line_to_file(t + "\n", os.path.join(curdir, os.path.pardir, "tmp", "full.sohu.com.title.txt"))
 
+def process_idf(from_, to_):
+    if not os.path.exists(from_): raise Exception("Can not find %s" % from_)
+    total = None
+    with open(from_, "r") as fin, open(to_, "w") as fout:
+        for x in fin.readlines():
+            o = x.split()
+            if len(o) != 2: continue
+            if o[0] == "</s>":
+                total = int(o[1]) 
+            else:
+                if not total:
+                    raise Exception("Wrong total number.")
+                if int(o[1]) > total: continue
+                fout.write("%s %f\n" % (o[0], math.log(total/int(o[1]))))
+
 class Test(unittest.TestCase):
     '''
     
@@ -532,6 +548,11 @@ class Test(unittest.TestCase):
 
     def test_sohu_news_remove_senseless_words(self):
         sohu_news_remove_senseless_words()
+
+    def test_process_idf(self):
+        from_ = os.path.join(curdir, "resources", "similarity.vocab.tf")
+        to_ = os.path.join(curdir, "resources", "similarity.vocab.idf")
+        process_idf(from_, to_)
 
     def test_solo_tnumber_utterance(self):
         t = "TNUMBER TNUMBER 年 经过 中国 数学 名词 审查 委员会 研究 算学 与 数学 两 词 的 使用 状况 后 确认 以 数学 表示 今天 意义 上 的"
