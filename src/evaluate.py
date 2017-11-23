@@ -36,6 +36,7 @@ import unittest
 import data_processor
 import json
 import summarizer
+from tqdm import tqdm
 
 sumz = summarizer.Summarizer()
 
@@ -51,6 +52,21 @@ class Test(unittest.TestCase):
     def tearDown(self):
         pass
 
+    def test_ranking_keywords_data(self):
+        from_ = os.path.join(curdir, os.path.pardir, "tmp", "news.json.keyword")
+        to_ = os.path.join(curdir, os.path.pardir, "tmp", "news.json.sen.ranking")
+        if os.path.exists(to_): os.remove(to_)
+        with open(from_, "r") as fin, open(to_, "w") as fout:
+            for x in fin.readlines():
+                o = x.split("\t")
+                if len(o) == 2:
+                    msg_id, content = [y.strip() for y in o]
+                    j = json.loads(content)
+                    r = sumz.ranking(title = j['title'], content = j['content'])
+                    if len(r) > 0:
+                        r = [str(p) for p in r]
+                        fout.write("%s\t%s\n" % (msg_id, "\t".join(r)))
+
     def test_evaluate_gf_data(self):
         print("test_evaluate_gf_data")
         f_from = os.path.join(curdir, "resources", "info500.json")
@@ -59,35 +75,29 @@ class Test(unittest.TestCase):
         if os.path.exists(f_to): os.remove(f_to)
         if os.path.exists(f_trace): os.remove(f_trace)
         output = []
-        trace = []
-        trace.append("#top1s\ttop1\tcontent tokens\n")
         with open(f_from, "r") as fin:
-            for x in fin.readlines():
+            for x in tqdm(fin.readlines()):
                 o = json.loads(x.strip())
                 content = o["content"]
                 title = o["title"]
-                abstract, scores = sumz.extract(content, title)
+                abstract = sumz.extract(content = content, title = title, title_weight = 0.4, rate = 140)
                 keywords, _ = sumz.keywords(content)
-                if len(scores) > 0:
+                if abstract:
                     output.append({
                                   "content": content,
                                   "headline": title,
-                                  "predict": "%s %s" %(abstract[0] if len(abstract) > 0 else "",  abstract[1] if len(abstract) > 1 else ""),
+                                  "predict": abstract,
                                   "_id": o["_id"],
                                   "uuid": o["uuid"],
-                                  "rank": zip(abstract, scores),
-                                  "keywords": keywords
+                                  "keywords": keywords,
+                                  "rank": []
                                   # "rank": "<br><br>".join(["score: %s| %s" % (b ,a) for (a, b) in zip(abstract, scores)])
                                   })
                     tokens = sumz.tokenlize(content)
                     # print("scores[0]:", scores[0])
                     # print("abstract[0]:", abstract[0])
                     # print("tokens:", tokens)
-                    trace.append("%f\t%s\t%s\n" %(scores[0], abstract[0], " ".join(tokens)))
             
-        with open(f_trace, "w") as fout:
-            fout.writelines(trace)
-
         with open(f_to, "w") as fout:
             fout.write(json.dumps(output, ensure_ascii=False))
 
