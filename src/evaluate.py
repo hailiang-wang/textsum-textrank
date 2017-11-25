@@ -40,6 +40,12 @@ from tqdm import tqdm
 
 sumz = summarizer.Summarizer()
 
+def append_line(file, line):
+    '''
+    append a line to file
+    '''
+    with open(file, "a") as fout:
+        fout.write(line)
 
 # run testcase: python /Users/hain/ai/textsum-textrank/src/evaluate.py Test.testExample
 class Test(unittest.TestCase):
@@ -51,6 +57,21 @@ class Test(unittest.TestCase):
 
     def tearDown(self):
         pass
+
+    def test_news_json_tokenlize(self):
+        from_ = os.path.join(curdir, os.path.pardir, "tmp", "news.json.keyword")
+        to_ = os.path.join(curdir, os.path.pardir, "tmp", "news.json.sen.tokens")
+        if os.path.exists(to_): os.remove(to_)
+        with open(from_, "r") as fin, open(to_, "w") as fout:
+            for x in fin.readlines():
+                o = x.split("\t")
+                if len(o) == 2:
+                    msg_id, content = [y.strip() for y in o]
+                    j = json.loads(content)
+                    z = [msg_id]
+                    for y_, y in sumz.tokenlize(j['content'], j['title'], punct = False, stopword = False):
+                        z.append('%s\001%s' % (y_, y))
+                    append_line(to_, "\t".join(z) + "\n")
 
     def test_ranking_keywords_data(self):
         from_ = os.path.join(curdir, os.path.pardir, "tmp", "news.json.keyword")

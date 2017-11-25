@@ -57,7 +57,7 @@ def normalize(v):
     '''
     norm=numpy.linalg.norm(v, ord=1)
     if norm==0:
-        norm=numpy.finfo(v.dtype).eps
+        norm=numpy.finfo(float).eps
 
     r = v/norm
     return [float("%.5f" % x) for x in r]
@@ -108,32 +108,13 @@ class Summarizer():
 
             if x in PUNCT_SENTENCE_ENDS and not status_embed:
                 sb.append(x)
-                yield "".join(sb), x
+                if len(sb)>1:
+                    yield "".join(sb), x
                 sb = []
             else:
                 sb.append(x)
-        if len(sb) > 0:
+        if len(sb) > 1:
             yield "".join(sb), None
-
-        # # print("paragraph: %s \n" % paragraph)
-        # w, t = data_processor.word_segment(paragraph, vendor = "jieba", punct = True)
-        # sb = [] # temp sentence buffer
-        # for x,y in zip(w, t):
-        #     if x == PUNCT_SENTENCE_EMBED_START:
-        #         status_embed = True
-        #         sb.append(x)
-        #         continue
-
-        #     if x == PUNCT_SENTENCE_EMBED_END:
-        #         status_embed = False
-
-        #     if x in PUNCT_SENTENCE_ENDS and not status_embed:
-        #         yield "".join(sb), x
-        #         sb = []
-        #     else:
-        #         sb.append(x)
-        # # 当一个段落的结尾没有标点的时候。
-        # if len(sb) > 3: yield "".join(sb), None
 
     def doc_to_paragraphs(self, content):
         '''
@@ -141,7 +122,7 @@ class Summarizer():
         '''
         result = []
         paragraphs = content.split("\n")
-        for x in paragraphs:
+        for x_,x in enumerate(paragraphs):
             x = x.strip()
             is_sentence = False
             # 判断是不是句子，如果不是句子
@@ -159,10 +140,8 @@ class Summarizer():
         将文档转化为独立的句子
         '''
         result = []
-        paragraphs = self.doc_to_paragraphs(content)
-        for x in paragraphs:
-            for s,p in self.paragraph_to_sentence(x):
-                result.append(s)
+        for x,_ in self.paragraph_to_sentence(content):
+            result.append(x)
         return result
 
     def get_sentence_tokens(self, sentences):
@@ -186,24 +165,28 @@ class Summarizer():
         title = data_processor.filter_full_to_half(title) if title else ""
         return data_processor.extract_keywords(content, vendor = vendor)
 
-    def tokenlize(self, content, title = None):
+    def tokenlize(self, content, title = None, punct = False, stopword = False):
         '''
         Get all tokens as a list for content
         '''
         # 全角转半角
         content = data_processor.filter_full_to_half(content)
-        title = data_processor.filter_full_to_half(title) if title else ""
+        title = data_processor.filter_full_to_half(title) if title else None
         sentences = self.doc_to_sentences(content)
-        # for x in sentences:
-        #     print(x)
-        #     print("*"*20 + "\n")
-        tokens = []
 
+        # first pipe out title
+        if title:
+            w, _ =  data_processor.word_segment(title, vendor = "jieba", punct = punct, stopword = stopword)
+            yield " ".join(w), title
+        else:
+            yield None, None
+
+        # after that, pipe out each sentence in content
         for x in sentences:
-            w, _ = data_processor.word_segment(x, vendor = "jieba", punct = False, stopword = False)
-            if len(w) > 3:
-                for o in w: tokens.append(o)
-        return tokens
+            w, _ = data_processor.word_segment(x, vendor = "jieba", punct = punct, stopword = stopword)
+            if len(w) > 0:
+                yield " ".join(w), x
+
 
     def ranking(self, content, title, title_weight = 0.4):
         '''
@@ -215,13 +198,8 @@ class Summarizer():
         @return    list, 句子排名
         '''
         # 全角转半角
-        content = data_processor.filter_full_to_half(content)
-        title = data_processor.filter_full_to_half(title) if title else ""
         # TODO return sub-title
-        sentences = self.doc_to_sentences(content)
-        # for x in sentences:
-        #     print(x)
-        #     print("*"*20 + "\n")
+        sentences = []
         s2t = dict() # sentence to tokens
         t2s = dict() # tokens to sentence
         t2seq = dict() # tokens to sequence
@@ -229,16 +207,17 @@ class Summarizer():
         tokens = [] # ["word1 word2 word3", ...]
         tt = 0 # token total
 
-        for x_,x in enumerate(sentences):
-            w, _ = data_processor.word_segment(x, vendor = "jieba", punct = False, stopword = False)
-            if len(w) > 3:
-                tt += len(w)
-                o = " ".join(w)
-                s2t[x] = o
-                t2s[o] = x
-                t2seq[o] = x_
-                t2len[o] = len(common_utils.to_utf8(x).decode("utf8"))
-                tokens.append(o)
+        index = 0
+        for x,x_ in self.tokenlize(content, title = title):
+            if x and len(x) > 0 and index > 0:
+                if not x in t2seq:
+                    t2seq[x] = index
+                    s2t[x_] = x
+                    t2s[x] = x_
+                    t2len[x] = len(common_utils.to_utf8(x_).decode("utf8"))
+                    tokens.append(x)
+                    sentences.append(x_)
+            index += 1
 
         '''
         Recall: sort and ranking with textrank
@@ -259,10 +238,12 @@ class Summarizer():
             # title tokens and tags
             title_words, _ = data_processor.word_segment(title, vendor = "jieba", punct = False, stopword = False)
             title_sort = [similarity.compare(" ".join(title_words), x, seg = False) for x in sort]
+            
             if len(title_sort) > 0:
                 title_sort = normalize(title_sort)
                 # title score weighted
                 title_sort = [ a*title_weight*(1/len(sort))*100 + b for (a, b) in zip(title_sort, [tr[x] for x in sort])]
+                
                 # print("title score: %s" % tsw)
                 resort = []
                 for (x,y) in zip([ x for _,x in sorted(zip(title_sort, sort), reverse=True)], sorted(title_sort, reverse=True)):
@@ -270,7 +251,7 @@ class Summarizer():
                     resort.append(x)
                 sort = resort
 
-        return [t2seq[x] for x in sort]
+        return [t2seq[x] for x in sort], sort
 
     def extract(self, content, title = None, title_weight = 0.4, rate = 0.3):
         '''
@@ -281,14 +262,7 @@ class Summarizer():
         @param     rate: 摘要的最长长度。如果 rate 大于1，则认为传入固定值，e.g 140;如果 rate 小于1，则认为生成原文的百分比
         @return    string: 文本摘要
         '''
-        # 全角转半角
-        content = data_processor.filter_full_to_half(content)
-        title = data_processor.filter_full_to_half(title) if title else ""
-        # TODO return sub-title
-        sentences = self.doc_to_sentences(content)
-        # for x in sentences:
-        #     print(x)
-        #     print("*"*20 + "\n")
+        sentences = []
         s2t = dict() # sentence to tokens
         t2s = dict() # tokens to sentence
         t2seq = dict() # tokens to sequence
@@ -296,16 +270,17 @@ class Summarizer():
         tokens = [] # ["word1 word2 word3", ...]
         tt = 0 # token total
 
-        for x_,x in enumerate(sentences):
-            w, _ = data_processor.word_segment(x, vendor = "jieba", punct = False, stopword = False)
-            if len(w) > 3:
-                tt += len(w)
-                o = " ".join(w)
-                s2t[x] = o
-                t2s[o] = x
-                t2seq[o] = x_
-                t2len[o] = len(common_utils.to_utf8(x).decode("utf8"))
-                tokens.append(o)
+        index = 0
+        for x,x_ in self.tokenlize(content, title = title):
+            if x and len(x) > 0 and index > 0:
+                if not x in t2seq:
+                    t2seq[x] = index
+                    s2t[x_] = x
+                    t2s[x] = x_
+                    t2len[x] = len(common_utils.to_utf8(x_).decode("utf8"))
+                    tokens.append(x)
+                    sentences.append(x_)
+            index += 1
 
         '''
         摘要文本的长度
@@ -333,14 +308,15 @@ class Summarizer():
             # title tokens and tags
             title_words, _ = data_processor.word_segment(title, vendor = "jieba", punct = False, stopword = False)
             title_sort = [similarity.compare(" ".join(title_words), x, seg = False) for x in sort]
+            
             if len(title_sort) > 0:
                 title_sort = normalize(title_sort)
                 # title score weighted
                 title_sort = [ a*title_weight*(1/len(sort))*100 + b for (a, b) in zip(title_sort, [tr[x] for x in sort])]
+                
                 # print("title score: %s" % tsw)
                 resort = []
                 for (x,y) in zip([ x for _,x in sorted(zip(title_sort, sort), reverse=True)], sorted(title_sort, reverse=True)):
-                    # print("text:%s |score: %f" % (x,y))
                     resort.append(x)
                 sort = resort
 
@@ -427,12 +403,8 @@ class Test(unittest.TestCase):
 
     def test_extract(self):
         sumzer = Summarizer()
-        abstract, scores = sumzer.extract(self.content, self.title)
-        sum_up = 0.0
-        for (x,y) in enumerate(abstract):
-            print("index: %d >> %s | score: %f" % (x, y, scores[x]))
-            sum_up += scores[x]
-        print("total: %f" % sum_up)
+        abstract = sumzer.extract(self.content, self.title)
+        print("abstract: %s" % abstract)
 
     def test_keywords(self):
         content = '''11月2日晚间，重庆小康工业集团股份有限公司(以下简称“小康股份”)发布公告称其前期通过全资子公司SFMOTORS收购美国AMG公司民用汽车工厂及相关资产一事已正式完成交割程序。据了解，本次收购顺利完成后，SFMOTORS在保留了AMG给奔驰代工期间的原班运营人马的基础上，将很好地继承AMG现有的技术产能优势及高端品牌车型制造经验，进一步强化其自身实力，使其成为唯一一个中美两地都拥有制造基地的电动车科技企业，这也标志着小康股份创建新能源电动汽车领先品牌在制造环节布局的进一步完善。\n \n　　借力资本夯实新能源战略\n \n　　据了解，小康股份作为国内自主品牌汽车制造企业，一直专注于汽车产业的制造、销售和研发。顺应行业发展趋势和国家政策引导，2016年7月，刚上市的小康股份即提出转型规划，宣布将面向新能源汽车实现战略转型，制定了“创建新能源电动车领先品牌，发展高端智能电动车”的战略。\n \n　　在市场看来，小康股份适时入局新能源汽车领域，是兼具“天时、地利、人和”的明智之举。一方面，小康股份作为集汽车整车及汽车发动机、汽车零部件制造、销售于一体的制造型企业，已具备强大的整车集成的经验与技术开发储备，拥有研产供销全产业链运作经验，以及完善的产品创造流程体系，其专业的生产设备、生产线以及管理运营也具有明显优势；另一方面，随着公司成功登陆资本市场，其资金优势及资源整合能力也给其注入强大的后备支撑力。近日，小康股份发布可转债募集公告，拟募集资金15亿元，将全部投向年产5万辆纯电动乘用车建设项目。据公告显示，该项目总投资25亿元，将于2018年10月完工，计划实现年产5万台系列新能源乘用车和6万套电池PACK的产能目标，预计在项目建设完成并全部达产后每年能给公司带来净利润约2.37亿元。\n \n　　事实上，2016年以来，小康股份借力资本市场的融资及资源整合能力，通过一系列的海外技术和人才资源整合，逐步在新能源产业链包括三电技术、智能驾驶、BMS技术等方面形成了核心优势，此外凭借其多年的整车制造运营经验，其在新能源汽车产品制造能力、供应链和营销网络建设方面也在迅速完善。由此构成了小康股份在新能源汽车领域内独有的竞争优势。今年年初，小康股份获得新能源车独立生产资质的企业，成为国内第8家获此资质的汽车制造企业，顺利入局国内新能源汽车优势制造商阵营。\n \n　　整合全球资源强势发力\n \n　　公开资料显示，小康股份一方面通过整合全球优势资源，迅速完成了公司在新能源汽车领域业务闭环。除了此次顺利完成的AMG收购，小康股份上个月刚宣布其子公司SFMOTORS以3300万美元全资收购美国电池系统公司InEVit，以此优先掌握具有国际领先的新能源电动汽车电池系统核心技术，并将InEvit的创始人(同时是Tesla创始人兼首任CEO)MartinEberhard，及共同创始人-汽车产品机电一体化专家HeinerFees，以及InEVit的CEO、美国硅谷资深投资专家MikeMiskovsky悉数纳入公司麾下，这将为小康股份在新能源汽车业务领域的市场定位、产品规划、品牌推广、商业计划等方面带来全新的理念和执行布局。\n \n　　另一方面，小康股份高度重视企业自身研发团队建设。公司已在美国加州硅谷设立美国总部和研发中心，并引进掌握国际领先电动车技术的核心团队，目前已组建以唐一帆先生为技术与研发带头人的优秀团队负责电动车的研发。据了解，唐一帆先生作为业内电动车技术领军人物之一，曾参与特斯拉Roadster和ModelS电动车三电系统设计，是特斯拉ModelXAWD原型车三电系统的设计者之一，并曾在美国加州硅谷的另一家电动车创新公司Atieva任职，在LucidAir车型上实现了技术的创新和迭代，进一步提升了该车的百公里加速度、最高车速等性能指标。在坐拥AMG和InEVit这两项优质资源后的SFMOTORS也被市场广泛看好，甚至因其同样坐落硅谷、放眼国际主打高端电动车市场、研发团队拥有多名原特斯拉工程师的特性，被不少人誉为“最有可能接近特斯拉的公司”。\n \n　　某市场人士表示，在国内入局新能源汽车的传统车企中，小康股份无疑是做得较好的企业之一。无论是战略规划方面，或是执行落地方面，都是基于对行业发展趋势可把控范围内的果断决判。尤其是公司登陆资本市场以来，充分利用其资源整合能力，迅速完整新能源汽车制造产业链布局，掌握核心技术，占得先发优势。在国家政策支持引导、市场发展态势良好的背景下，小康股份新能源布局非常值得期待。","title":"小康股份(601127)收购AMG顺利交割 借力资本持续发力新能源'''
@@ -455,6 +427,19 @@ class Test(unittest.TestCase):
         sumzer = Summarizer()
         for x,_ in sumzer.paragraph_to_sentence(self.paragraph):
             print("pop: %s | 标点: %s" %(x, _))
+
+    def test_basecase_punt(self):
+        # content = '''午后，指数逐步拉起，创业板成功站上1900点大关，深市已经成功翻红。板块方面，券商板块异动拉升，\n截至发稿，第一创业、浙商证券、中原证券、国盛金控、中国银河、国元证券、华安证券等个股纷纷直线拉升？？？？；次新股持续活跃，正川股份强势封板，广东骏亚涨超6%，江丰电子、国科微等集体冲高
+        # '''
+        content = '''最近，中科招商又双叒收到证监局的监管函，这次是因为关联方资金占用问题。 　　深圳证监局表示，中科招商在挂牌新三板时有1.02亿元左右关联方资金占用未清理，挂牌后又新增关联方资金占用8203万元。虽然后面都清理完毕了，但问题比较严重，违反了监管规定。实控人单祥双没有采取有效措施防止股东占用中科招商的资金，而且没有督促公司如实披露，决定对其采取出具警示函的监管措施。  　　何为关联方资金占用？ 　　什么是关联方资金占用问题？究竟有哪些危害？为什么监管层要严厉查处？基金君先来解释一下。 　　就是控股股东、董监高等拿公司的钱去给关联方使用，而没有用到公司的生产经营上，通俗来讲就是“挪用公款”，是对投资者不负责任的行为。 　　北京某新三板投资人士解释，关联方资金占用主要指关联的参股企业，即没有并表的企业，比如持股百分十几的，从公司借钱，“如果是并表的企业、控股子公司就没有关系，相互输血很正常，但是给没有并表的企业输血，等于是拿股东的钱给另外公司的股东用，问题就很大了。因为公司资金是属于所有股东的，大股东占用资金就侵害了小股东的利益，参股公司占用资金也侵害了其他股东的利益。” 　　事实上，这种问题这几年在新三板比较突出，说明挂牌企业运作很不规范。上述人士表示，关联方占用问题一般出现在中小型的民营企业，因为企业较小的时候个人资金和企业资金没有分开，但一旦企业成长为大公司，挂牌上市的话，理应避免这种问题出现。 　　资金占用不仅严重影响挂牌公司的营运能力和盈利能力，损害中小股东的利益，同时会影响挂牌公司正常经营，甚至会导致投资者对此类公司丧失投资的信任，不利于挂牌公司的长久发展。 　　监管对此类问题的查处也日趋严格，目的是为了维护投资者乃至挂牌公司的利益，避免出现关联方“掏空”挂牌公司的情形。 　　中科招商资金占用情形多 　　基金君发现，这次中科招商的关联方资金占用情形非常多，比如为关联方垫付费用、预付相关增资款、董事个人借款、股权转让占用资金、给关联企业提供借款等。 　　业内人士分析推断，中科招商作为业内知名的私募股权机构、挂牌公司，要么是内部管理还存在问题，十分不规范，要么是内部有几个板块亏钱或缺钱，不得不相互输血。 　　1。为关联方垫付费用 　　2014年7月至10月，公司在同一实际控制人控制的北京速普创新投资筹建期间，为其垫付装修费、租金等共计154.98万元。公司挂牌后，北京速普于2015年6月30日将该笔款项归还。 　　2。预付相关增资款 　　2015年4月30日，公司全资子公司深圳中科成长股权投资基金与实际控制人单祥双、刘继军及实控人控制的北京中科创大创业教育投资签订增资协议，约定中科成长以2500万元向北京中科创大增资。 　　2015年7月9日，在相关协议尚未获得公司股东大会审议通过时，中科成长提前向中科创大付款2500万元。2016年1月26日，公司2016年第一次临时股东大会审议否决《关于公司全资子公司对外投资并构成关联交易的议案》。2016年3月11日，中科创大才向中科成长退回2500万元增资款。 　　3。董事个人借款 　　公司董事谢勇，同时担任控股子公司广东中科招商创业投资董事总经理。2015年4月30日，广东中科与谢勇签订《借款合同》，约定广东中科为谢勇提供借款110万元，借款用途为个人自用，同日广东中科向谢勇付款110万元，2016年2月29日谢勇向广东中科归还110万元借款及相应利息。2015年8月24日，广东中科与谢勇签订《借款合同》，约定广东中科为谢勇提供借款25万元，借款用途为文灿压铸项目跟进投资款。2015年8月25日广东中科向谢勇付款25万元，2016年2月22日谢勇向广东中科归还25万元及其利息。 　　4。股权转让形成的资金占用 　　2014年12月，公司与关联方深圳中科发明投资签订《股权转让协议》，约定公司向中科发明转让所持有的韶山润泽东方文化产业发展股份有限公司60%的股权，股权转让价款为1亿元。协议同时约定，中科发明应分别于2015年3月31日向公司支付3200万元，2015年9月30日支付6800万元。检查发现，中科发明于2015年3月26日提前向公司支付了3200万元，但第二笔6800万元的股权转让款于2015年11月30日才支付，此后2015年12月8日中科发明向公司支付了相关延期付款违约金193.8万元。公司未对该资金占用情况进行披露。 　　5。向中科发明提供借款 　　2015年5月，公司投资决策委员会作出《关于利用闲置资金进行短期理财的决议》，根据公司与中科发明签署的《借款协议》，约定公司将自有资金4 000万元出借给中科发明，中科发明应保证公司资金年收益率固定为8%。公司分别于2015年5月20日、2015年5月28日将两笔各2 000万元款项转账给中科发明。2015年6月30日，中科发明向公司归还4 000万元，并在之后向公司支付借款利息32.44万元。公司未对该资金占用情况进行披露。 　　6。向中科云展提供借款 　　2015年6月，公司投资决策委员会作出《关于利用闲置资金进行短期理财的决议》，根据公司与同一实控人控制的深圳中科云展科技孵化器签署的《借款协议》，公司将自有资金2 000万元出借给中科云展，中科云展应保证公司资金年收益率固定为8%。公司据此于2015年6月8日将1568万元转给中科云展，2015年6月30日，中科云展向公司归还1568万元本金，并在2016年8月11日向公司支付借款利息7.56万元。公司未对该资金占用情况进行披露。 　　加强对关联方资金占用监管 　　北京某新三板投资人士表示，这几年监管层在资金占用问题上监管是趋严的，因为这种事情的发生，严重侵害了股东的利益。“公司和个人的资金使用没有完全分离，不是现代的企业所为，监管肯定是严格杜绝的，去年股转公司也一直在查。” 　　此次深圳证监局也表示，中科招商违反了《非上市公众公司监督管理办法》的规定，单祥双作为公司实控人没有采取措施防止股东占用中科招商的资金，且明知存在占用资金的情形，没有督促公司如实进行信息披露，对此负有主要责任。决定对单祥双采取出具警示函的行政监管措施。 　　那么，中科招商到底违反了监管的哪些规定？基金君查阅了《非上市公众公司监督管理办法》： 　　第十三条规定，公众公司进行关联交易应当遵循平等、自愿、等价、有偿的原则，保证交易公平、公允，维护公司的合法权益，根据法律、行政法规、中国证监会的规定和公司章程，履行相应的审议程序。 　　第十四条规定，公众公司应当采取有效措施防止股东及其关联方以各种形式占用或者转移公司的资金、资产及其他资源。 　　还有第二十条也规定了公司的信息披露义务，保证公司披露信息的真实、准确、完整、及时。 　　上述人士告诉基金君，作为投资人，他们对发生关联方资金占用的公司的投资是比较小心的，“我们会将资金占用作为风险点考虑，因为投资人将钱投给企业，但企业却将投的资金用于关联方占用，没有发展主业，等于是白投了，这是我们最担心的。没有给投资的股东使用赚钱，给别的股东赚钱了，我们看到这种事情会比较谨慎。”'''
+        title = "挪用\"公款\"近2亿伤害股东利益 中科招商(832168)单祥双遭警示"
+        sumzer = Summarizer()
+        inx = 0
+        rank, texts = sumzer.ranking(content, title = title)
+        print("rank", rank)
+        for x in texts:
+            inx += 1
+            print("index: %d" % inx, x)
 
     def test_doc_to_sentences(self):
         sumzer = Summarizer()
@@ -487,6 +472,12 @@ class Test(unittest.TestCase):
         sumzer = Summarizer()
         abstract = sumzer.extract(content, title)
         print("extract:", abstract)
+
+    def test_tokenlize(self):
+        sumzer = Summarizer()
+        tokens = sumzer.tokenlize(content = self.content)
+        for x_,x in enumerate(tokens):
+            print("index %d:" % x_, x)
 
     def test_doc_to_paragraphs(self):
         sumzer = Summarizer()

@@ -112,7 +112,8 @@ def _get_wv(sentence):
             try:
                 vectors.append(_vectors.word_vec(y_))
             except KeyError as error:
-                print("not exist in w2v model: %s" % y_)
+                # print("not exist in w2v model: %s" % y_)
+                pass
                 # c.append(np.zeros((100,), dtype=float))
     return vectors
 
