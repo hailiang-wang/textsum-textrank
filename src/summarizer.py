@@ -251,7 +251,7 @@ class Summarizer():
                     resort.append(x)
                 sort = resort
 
-        return [t2seq[x] for x in sort], sort
+        return [t2seq[x] - 1  for x in sort]
 
     def extract(self, content, title = None, title_weight = 0.4, rate = 0.3):
         '''
@@ -268,11 +268,15 @@ class Summarizer():
         t2seq = dict() # tokens to sequence
         t2len = dict() # tokens to length
         tokens = [] # ["word1 word2 word3", ...]
+        title_tokens = None
         tt = 0 # token total
 
         index = 0
         for x,x_ in self.tokenlize(content, title = title):
-            if x and len(x) > 0 and index > 0:
+            if index == 0 and x:
+                title_tokens = x
+
+            if index > 0 and len(x) > 0 and x:
                 if not x in t2seq:
                     t2seq[x] = index
                     s2t[x_] = x
@@ -304,10 +308,9 @@ class Summarizer():
         '''
         Evaluate: re-ranking model with title
         '''
-        if title:
+        if title_tokens:
             # title tokens and tags
-            title_words, _ = data_processor.word_segment(title, vendor = "jieba", punct = False, stopword = False)
-            title_sort = [similarity.compare(" ".join(title_words), x, seg = False) for x in sort]
+            title_sort = [similarity.compare(title_tokens, x, seg = False) for x in sort]
             
             if len(title_sort) > 0:
                 title_sort = normalize(title_sort)
@@ -435,11 +438,8 @@ class Test(unittest.TestCase):
         title = "挪用\"公款\"近2亿伤害股东利益 中科招商(832168)单祥双遭警示"
         sumzer = Summarizer()
         inx = 0
-        rank, texts = sumzer.ranking(content, title = title)
+        rank = sumzer.ranking(content, title = title)
         print("rank", rank)
-        for x in texts:
-            inx += 1
-            print("index: %d" % inx, x)
 
     def test_doc_to_sentences(self):
         sumzer = Summarizer()
