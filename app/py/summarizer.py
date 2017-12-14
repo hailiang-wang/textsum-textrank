@@ -63,13 +63,25 @@ def normalize(v):
     return [float("%.5f" % x) for x in r]
 
 
+
+
 class Summarizer():
     '''
     summarize articles
     '''
 
     def __init__(self):
-        pass
+        self.noise = set()
+        self.load_noise()
+
+    def load_noise(self):
+        noise_file = os.path.join(curdir, "resources", "noise.2000.utf8")
+        if os.path.exists(noise_file): 
+            with open(noise_file, "r") as fin:
+                for x in fin.readlines():
+                    x = [ y.strip() for y in x.split("\t")]            
+                    if len(x) == 2:
+                        self.noise.add(data_processor.filter_full_to_half(x[0]) + ",")
 
     def build_graph(self, nodes):
         """Return a networkx graph instance.
@@ -141,7 +153,13 @@ class Summarizer():
         '''
         result = []
         for x,_ in self.paragraph_to_sentence(content):
-            result.append(x)
+            repl = False
+            for y in self.noise: # 去除噪音
+                if x.startswith(y):
+                    result.append(x.replace(y, "", 1))
+                    repl = True
+                    break
+            if not repl: result.append(x)
         return result
 
     def get_sentence_tokens(self, sentences):
