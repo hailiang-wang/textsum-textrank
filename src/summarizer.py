@@ -188,7 +188,7 @@ class Summarizer():
                 yield " ".join(w), x
 
 
-    def ranking(self, content, title, title_weight = 0.4):
+    def ranking(self, content, title, title_weight = 0.6):
         '''
         输出句子的排名
         @param     content: 正文
@@ -285,6 +285,8 @@ class Summarizer():
                     tokens.append(x)
                     sentences.append(x_)
             index += 1
+
+        print("sum: 1")
 
         '''
         摘要文本的长度

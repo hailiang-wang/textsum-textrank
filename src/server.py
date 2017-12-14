@@ -44,7 +44,7 @@ logger = log.getLogger("text-classifier:server")
 
 import summarizer
 
-sumzer = summarizer.Summarizer()
+sz = summarizer.Summarizer()
 
 @app.route('/api/summary', methods=["POST"])
 def api_summary():
@@ -59,7 +59,7 @@ def api_summary():
         if http_util.is_json_headers(request.headers):
             req = json.loads(request.get_data())
             if "content" in req:
-                abstract, _ = sumzer.extract(req["content"])
+                abstract = sz.extract(content = req["content"], rate = 140)
                 result["rc"] = 1
                 result["data"] = abstract
             else:

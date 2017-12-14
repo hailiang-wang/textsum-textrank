@@ -38,7 +38,7 @@ import json
 import summarizer
 from tqdm import tqdm
 
-sumz = summarizer.Summarizer()
+sz = summarizer.Summarizer()
 
 def append_line(file, line):
     '''
@@ -58,6 +58,37 @@ class Test(unittest.TestCase):
     def tearDown(self):
         pass
 
+    def test_testcase_id_tokenlize(self):
+        from_ = os.path.join(curdir, os.path.pardir, "tmp", "testcase.id.txt")
+        to_ = os.path.join(curdir, os.path.pardir, "tmp", "testcase.id.tokens")
+        if os.path.exists(to_): os.remove(to_)
+        with open(from_, "r") as fin, open(to_, "w") as fout:
+            for x in fin.readlines():
+                o = x.split("\t")
+                if len(o) == 2:
+                    msg_id, content = [y.strip() for y in o]
+                    j = json.loads(content)
+                    z = [msg_id]
+                    for y_, y in sz.tokenlize(j['content'], j['title'], punct = False, stopword = False):
+                        z.append('%s\001%s' % (y_, y))
+                    append_line(to_, "\t".join(z) + "\n")
+
+    def test_testcase_id_ranking(self):
+        from_ = os.path.join(curdir, os.path.pardir, "tmp", "testcase.id.txt")
+        to_ = os.path.join(curdir, os.path.pardir, "tmp", "testcase.id.ranking")
+        if os.path.exists(to_): os.remove(to_)
+        with open(from_, "r") as fin, open(to_, "w") as fout:
+            for x in fin.readlines():
+                o = x.split("\t")
+                if len(o) == 2:
+                    msg_id, content = [y.strip() for y in o]
+                    j = json.loads(content)
+                    r = sz.ranking(title = j['title'], content = j['content'])
+                    if len(r) > 0:
+                        r = [str(p) for p in r]
+                        fout.write("%s\t%s\n" % (msg_id, "\t".join(r)))
+
+
     def test_news_json_tokenlize(self):
         from_ = os.path.join(curdir, os.path.pardir, "tmp", "news.json.keyword")
         to_ = os.path.join(curdir, os.path.pardir, "tmp", "news.json.sen.tokens")
@@ -69,7 +100,7 @@ class Test(unittest.TestCase):
                     msg_id, content = [y.strip() for y in o]
                     j = json.loads(content)
                     z = [msg_id]
-                    for y_, y in sumz.tokenlize(j['content'], j['title'], punct = False, stopword = False):
+                    for y_, y in sz.tokenlize(j['content'], j['title'], punct = False, stopword = False):
                         z.append('%s\001%s' % (y_, y))
                     append_line(to_, "\t".join(z) + "\n")
 
@@ -83,7 +114,7 @@ class Test(unittest.TestCase):
                 if len(o) == 2:
                     msg_id, content = [y.strip() for y in o]
                     j = json.loads(content)
-                    r = sumz.ranking(title = j['title'], content = j['content'])
+                    r = sz.ranking(title = j['title'], content = j['content'])
                     if len(r) > 0:
                         r = [str(p) for p in r]
                         fout.write("%s\t%s\n" % (msg_id, "\t".join(r)))
@@ -101,8 +132,8 @@ class Test(unittest.TestCase):
                 o = json.loads(x.strip())
                 content = o["content"]
                 title = o["title"]
-                abstract = sumz.extract(content = content, title = title, title_weight = 0.4, rate = 140)
-                keywords, _ = sumz.keywords(content)
+                abstract = sz.extract(content = content, title = title, title_weight = 0.4, rate = 140)
+                keywords, _ = sz.keywords(content)
                 if abstract:
                     output.append({
                                   "content": content,
@@ -114,7 +145,7 @@ class Test(unittest.TestCase):
                                   "rank": []
                                   # "rank": "<br><br>".join(["score: %s| %s" % (b ,a) for (a, b) in zip(abstract, scores)])
                                   })
-                    tokens = sumz.tokenlize(content)
+                    tokens = sz.tokenlize(content)
                     # print("scores[0]:", scores[0])
                     # print("abstract[0]:", abstract[0])
                     # print("tokens:", tokens)
