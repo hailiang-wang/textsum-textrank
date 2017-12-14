@@ -59,7 +59,9 @@ def api_summary():
         if http_util.is_json_headers(request.headers):
             req = json.loads(request.get_data())
             if "content" in req:
-                abstract = sz.extract(content = req["content"], rate = 140)
+                rate = req["rate"] if "rate" in req else 140
+                title = req["title"] if "title" in req else None
+                abstract = sz.extract(content = req["content"], title = title, rate = rate)
                 result["rc"] = 1
                 result["data"] = abstract
             else:

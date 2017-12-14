@@ -154,7 +154,7 @@ class Summarizer():
             yield " ".join(w)
 
 
-    def keywords(self, content, title = None, vendor = "tfidf"):
+    def keywords(self, content, vendor = "tfidf"):
         '''
         抽取方式取文章的关键字
         content: 正文
@@ -162,7 +162,6 @@ class Summarizer():
         '''
         # 全角转半角
         content = data_processor.filter_full_to_half(content)
-        title = data_processor.filter_full_to_half(title) if title else ""
         return data_processor.extract_keywords(content, vendor = vendor)
 
     def tokenlize(self, content, title = None, punct = False, stopword = False):
@@ -253,7 +252,7 @@ class Summarizer():
 
         return [t2seq[x] - 1  for x in sort]
 
-    def extract(self, content, title = None, title_weight = 0.4, rate = 0.3):
+    def extract(self, content, title = None, title_weight = 0.5, rate = 0.3):
         '''
         采用抽取方式提取摘要
         @param     content: 正文
